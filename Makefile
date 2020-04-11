@@ -1,6 +1,6 @@
-a.out:
+a.out: main.cpp
 	g++ -std=c++17 main.cpp
-test:
+test: main.cpp
 	g++ -std=c++17 -DTEST -o test main.cpp
 	./test
 demo: a.out
