@@ -221,7 +221,7 @@ int main() {
     cin >> numTagLines >> numQueries;
     Tree tree = parseTree(cin);
     string line;
-    for (; numQueries--; numQueries) {
+    for (; numQueries--;) {
         auto q = parseQuery(cin);
         auto res = executeQuery(tree, q);
         cout << res.value_or("Not Found!") << endl;
