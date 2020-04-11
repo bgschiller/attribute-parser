@@ -177,23 +177,23 @@ TEST_CASE("parseChildrenAndEndTag") {
 }
 
 
-TEST_CASE("parseElem") {
+TEST_CASE("parseTree") {
     stringstream empty{"<empty></empty>after"};
-    auto emptyElem = parseElem(empty);
-    REQUIRE(emptyElem.tag == "empty");
-    REQUIRE(emptyElem.attrs.size() == 0);
-    REQUIRE(emptyElem.attrs.size() == 0);
+    auto emptyElem = parseTree(empty);
+    REQUIRE(emptyElem.root.tag == "empty");
+    REQUIRE(emptyElem.root.attrs.size() == 0);
+    REQUIRE(emptyElem.root.attrs.size() == 0);
     string next;
     empty >> next;
     REQUIRE(next == "after");
 
     stringstream attrsOnly{"<attrs-only one = \"1\" two = \"2\"></attrs-only>"};
-    auto attrsElem = parseElem(attrsOnly);
-    REQUIRE(attrsElem.tag == "attrs-only");
-    REQUIRE(attrsElem.attrs.at("one") == "1");
-    REQUIRE(attrsElem.attrs.at("two") == "2");
-    REQUIRE(attrsElem.attrs.size() == 2);
-    REQUIRE(attrsElem.children.size() == 0);
+    auto attrsElem = parseTree(attrsOnly);
+    REQUIRE(attrsElem.root.tag == "attrs-only");
+    REQUIRE(attrsElem.root.attrs.at("one") == "1");
+    REQUIRE(attrsElem.root.attrs.at("two") == "2");
+    REQUIRE(attrsElem.root.attrs.size() == 2);
+    REQUIRE(attrsElem.root.children.size() == 0);
 }
 
 TEST_CASE("parseQuery") {
@@ -209,7 +209,7 @@ TEST_CASE("parseQuery") {
 TEST_CASE("executeQuery") {
 
     Element link{ "a", unordered_map<string, string>{{"href", "google.com"}}, {} };
-    Element root {"root", {}, {link}};
+    Tree root {link};
     Query query = TagQuery{"a", make_shared<Query>(AttrQuery{"href"})};
     auto res = executeQuery(root, query);
     REQUIRE(!!res);
