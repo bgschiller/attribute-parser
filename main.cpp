@@ -83,6 +83,12 @@ private:
 void readChar(istream& stream, char expected) {
     char actual;
     stream.get(actual);
+    if (actual != expected) {
+        string rest;
+        stream >> rest;
+        cout << actual << " != " << expected << "remaining stream is '" << rest << "'" << endl;
+
+    }
     assert(actual == expected);
 }
 
@@ -123,9 +129,16 @@ string executeQuery(const Element& el, const Query& q) {
             return pos->second;
         },
         [&el](const TagQuery& tq) {
-            auto pos = find_if(begin(el.children), end(el.children), [&](Element child){ return child.tag == tq.tag; });
-            if (pos == end(el.children)) return ""s;
-            return executeQuery(*pos, *tq.next);
+            auto tagMatches = [&](Element child){ return child.tag == tq.tag; };
+            for (
+                auto pos = begin(el.children);
+                pos != end(el.children);
+                pos = find_if(pos + 1, end(el.children), tagMatches)
+            ) {
+                auto res = executeQuery(*pos, *tq.next);
+                if (res != "") return res;
+            }
+            return ""s;
         });
 }
 
@@ -255,8 +268,25 @@ TEST_CASE("executeQuery") {
     Tree root {link};
     Query query = TagQuery{"a", make_shared<Query>(AttrQuery{"href"})};
     auto res = executeQuery(root, query);
-    REQUIRE(res != "");
     REQUIRE(res == "google.com");
+}
+
+TEST_CASE("non-unique path") {
+    stringstream nonUniq{"<div> <p> </p> <p data-second = \"yup\"> </p> </div>"};
+    auto tree = parseTree(nonUniq);
+    stringstream qStream{"div.p~data-second"};
+    auto query = parseQuery(qStream);
+    auto res = executeQuery(tree, query);
+    REQUIRE(res == "yup");
+}
+
+TEST_CASE("non-unique path2") {
+    stringstream nonUniq{"<div> <p> <a href = \"www.www.com\"></a> </p> <p data-second = \"yup\"> <a> </a> </p> </div>"};
+    auto tree = parseTree(nonUniq);
+    stringstream qStream{"div.p.a~href"};
+    auto query = parseQuery(qStream);
+    auto res = executeQuery(tree, query);
+    REQUIRE(res == "www.www.com");
 }
 #else
 int main() {
