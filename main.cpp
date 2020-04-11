@@ -1,10 +1,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <unordered_map>
-#include <variant>
 #include <vector>
 
 using namespace std;
@@ -26,12 +26,59 @@ class AttrQuery {
 public:
     const string attr;
 };
+class Query;
 class TagQuery {
 public:
     const string tag;
-    const std::shared_ptr<std::variant<TagQuery, AttrQuery>> next;
+    const std::shared_ptr<Query> next;
 };
-using Query = std::variant<TagQuery, AttrQuery>;
+class Query {
+    // This class should just be
+    // using Query = std::variant<TagQuery, AttrQuery>;
+    // but hackerrank doesn't support cpp-17 yet :(
+public:
+    Query(Query&& other)
+    : kind{other.kind}
+    , _attrQ{move(other._attrQ)}
+    , _tagQ{move(other._tagQ)}
+    { }
+    Query(AttrQuery&& aq)
+    : kind{Kind::Attr}
+    , _attrQ{make_unique<AttrQuery>(aq)}
+    , _tagQ{nullptr}
+    { }
+
+    Query(TagQuery&& tq)
+    : kind{Kind::Tag}
+    , _attrQ{nullptr}
+    , _tagQ{make_unique<TagQuery>(tq)}
+    { }
+
+    enum class Kind {
+        Tag, Attr
+    };
+
+    const Kind kind;
+
+    const AttrQuery& getAttr() const {
+        return *_attrQ;
+    }
+    const TagQuery& getTag() const {
+        return *_tagQ;
+    }
+
+    template<typename R>
+    R visit(
+        std::function<R(const AttrQuery&)> aFunc,
+        std::function<R(const TagQuery&)> tFunc
+    ) const {
+        if (kind == Kind::Attr) return aFunc(*_attrQ);
+        return tFunc(*_tagQ);
+    }
+private:
+    unique_ptr<AttrQuery> _attrQ;
+    unique_ptr<TagQuery> _tagQ;
+};
 
 void readChar(istream& stream, char expected) {
     char actual;
@@ -68,21 +115,21 @@ Query parseQuery(istream& stream) {
     return TagQuery{tag, make_shared<Query>(AttrQuery{attr})};
 }
 
-optional<string> executeQuery(Element el, Query q) {
-    if (std::holds_alternative<TagQuery>(q)) {
-        auto tq = std::get<TagQuery>(q);
-        auto pos = find_if(begin(el.children), end(el.children), [&](Element child){ return child.tag == tq.tag; });
-        if (pos == end(el.children)) return std::nullopt;
-        return executeQuery(*pos, *tq.next);
-    } else {
-        auto aq = std::get<AttrQuery>(q);
-        auto pos = el.attrs.find(aq.attr);
-        if (pos == end(el.attrs)) return std::nullopt;
-        return pos->second;
-    }
+string executeQuery(const Element& el, const Query& q) {
+    return q.visit<string>(
+        [&el](const AttrQuery& aq) {
+            auto pos = el.attrs.find(aq.attr);
+            if (pos == end(el.attrs)) return ""s;
+            return pos->second;
+        },
+        [&el](const TagQuery& tq) {
+            auto pos = find_if(begin(el.children), end(el.children), [&](Element child){ return child.tag == tq.tag; });
+            if (pos == end(el.children)) return ""s;
+            return executeQuery(*pos, *tq.next);
+        });
 }
 
-optional<string> executeQuery(Tree t, Query q) {
+string executeQuery(const Tree& t, const Query& q) {
     Element root{"root", {}, {t.root}};
     return executeQuery(root, q);
 }
@@ -134,7 +181,6 @@ Tree parseTree(istream& stream) {
     readChar(stream, '<');
     return Tree{parseElemExceptLangle(stream)};
 }
-
 
 
 #ifdef TEST
@@ -196,11 +242,11 @@ TEST_CASE("parseTree") {
 TEST_CASE("parseQuery") {
     stringstream simple{"tag1~value"};
     auto simpleQ = parseQuery(simple);
-    REQUIRE(holds_alternative<TagQuery>(simpleQ));
-    REQUIRE(get<TagQuery>(simpleQ).tag == "tag1");
-    auto inner = *get<TagQuery>(simpleQ).next;
-    REQUIRE(holds_alternative<AttrQuery>(inner));
-    REQUIRE(get<AttrQuery>(inner).attr == "value");
+    REQUIRE(simpleQ.kind == Query::Kind::Tag);
+    REQUIRE(simpleQ.getTag().tag == "tag1");
+    const Query& inner = *simpleQ.getTag().next;
+    REQUIRE(inner.kind == Query::Kind::Attr);
+    REQUIRE(inner.getAttr().attr == "value");
 }
 
 TEST_CASE("executeQuery") {
@@ -209,8 +255,8 @@ TEST_CASE("executeQuery") {
     Tree root {link};
     Query query = TagQuery{"a", make_shared<Query>(AttrQuery{"href"})};
     auto res = executeQuery(root, query);
-    REQUIRE(!!res);
-    REQUIRE(*res == "google.com");
+    REQUIRE(res != "");
+    REQUIRE(res == "google.com");
 }
 #else
 int main() {
@@ -221,7 +267,7 @@ int main() {
     for (; numQueries--;) {
         auto q = parseQuery(cin);
         auto res = executeQuery(tree, q);
-        cout << res.value_or("Not Found!") << endl;
+        cout << (res == "" ? "Not Found!" : res) << endl;
     }
     return 0;
 }
